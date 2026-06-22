@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Factor Graphs — Local Rule Routing</title>
+<meta name="description" content="Interactive explanation of factor graphs and belief propagation: why local message passing beats centralized computation."/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+  window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]},svg:{fontCache:'global'}};
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090f;--surface:#0e1118;--surface2:#12192a;
+  --border:#1c2133;--muted:#3a4460;--text:#c8d0e0;--bright:#eef1f8;
+  --blue:#4f8eff;--green:#2dd4a0;--red:#ff5f7e;--yellow:#f59e42;--purple:#7b5cf0;
+  --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.6;overflow-x:hidden}
+nav{position:sticky;top:0;z-index:50;border-bottom:1px solid var(--border);background:rgba(7,9,15,.88);backdrop-filter:blur(14px)}
+.nav-inner{max-width:1120px;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:52px;gap:16px;flex-wrap:wrap}
+.nav-brand{font-family:var(--mono);font-size:13px;color:var(--bright);display:flex;align-items:center;gap:10px}
+.nav-dot{width:8px;height:8px;border-radius:50%;background:var(--blue);box-shadow:0 0 10px var(--blue);animation:blink 2s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+.nav-links{display:flex;gap:18px;font-size:13px;color:var(--muted)}
+.nav-links a{color:inherit;text-decoration:none;transition:color .15s}
+.nav-links a:hover{color:var(--bright)}
+.shell{max-width:1120px;margin:0 auto;padding:0 24px 80px}
+.hero{padding:60px 0 48px;border-bottom:1px solid var(--border)}
+.hero-eye{font-family:var(--mono);font-size:11px;color:var(--blue);letter-spacing:.12em;text-transform:uppercase;margin-bottom:14px}
+.hero h1{font-size:clamp(2rem,5vw,3rem);font-weight:700;color:var(--bright);line-height:1.1;margin-bottom:16px;letter-spacing:-.02em}
+.hero-sub{max-width:600px;color:var(--text);font-size:15.5px;margin-bottom:32px}
+.hero-pills{display:flex;flex-wrap:wrap;gap:8px}
+.pill{font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:20px;border:1px solid var(--border);color:var(--muted)}
+.pill.blue{border-color:rgba(79,142,255,.4);color:var(--blue)}
+.pill.green{border-color:rgba(45,212,160,.4);color:var(--green)}
+.pill.red{border-color:rgba(255,95,126,.4);color:var(--red)}
+.section{padding:52px 0;border-bottom:1px solid var(--border)}
+.section:last-child{border-bottom:none}
+.sec-eye{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px}
+.sec-title{font-size:20px;font-weight:600;color:var(--bright);margin-bottom:8px}
+.sec-desc{color:var(--text);font-size:14px;margin-bottom:24px;max-width:660px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:760px){.grid2,.grid3{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px}
+.card-title{font-family:var(--mono);font-size:11px;color:var(--blue);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
+.card p,.card li{font-size:14px;color:var(--text)}
+.card ul{padding-left:16px}
+.card li{margin-bottom:5px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.panel-bar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);gap:12px;flex-wrap:wrap}
+.panel-bar-title{font-family:var(--mono);font-size:12px;color:var(--bright)}
+.panel-bar-desc{font-size:12px;color:var(--muted)}
+.controls{padding:14px 16px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.ctrl-btn{font-family:var(--mono);font-size:11px;padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;transition:all .15s}
+.ctrl-btn:hover{border-color:var(--blue);color:var(--blue)}
+.ctrl-btn.active{background:var(--blue);border-color:var(--blue);color:#fff}
+.ctrl-btn.green:hover{border-color:var(--green);color:var(--green)}
+.ctrl-btn.green.active{background:var(--green);border-color:var(--green);color:#04140f}
+.ctrl-label{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.slider-wrap{display:flex;align-items:center;gap:10px}
+input[type=range]{accent-color:var(--blue);flex:1;min-width:100px}
+.slider-val{font-family:var(--mono);font-size:12px;color:var(--bright);min-width:34px}
+.stat-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px}
+.stat-row:last-child{border-bottom:none}
+.stat-row span:first-child{color:var(--muted)}
+.stat-row span:last-child{font-family:var(--mono);color:var(--bright)}
+.formula{background:#080a12;border:1px solid var(--border);border-left:3px solid var(--purple);border-radius:8px;padding:14px 18px;font-family:var(--mono);font-size:13px;color:var(--bright);margin-top:14px;overflow-x:auto}
+.formula small{display:block;font-size:11px;color:var(--muted);margin-bottom:6px;font-family:var(--sans)}
+.timeline{display:flex;flex-direction:column;gap:0}
+.tl-item{display:grid;grid-template-columns:24px 1fr;gap:14px;padding-bottom:22px}
+.tl-item:last-child{padding-bottom:0}
+.tl-dot{width:10px;height:10px;border-radius:50%;background:var(--blue);margin-top:5px;margin-left:7px;position:relative;z-index:1}
+.tl-item:not(:last-child) .tl-dot::after{content:'';position:absolute;left:50%;top:13px;transform:translateX(-50%);width:1px;height:calc(100% + 12px);background:var(--border)}
+.tl-title{font-size:14px;font-weight:600;color:var(--bright);margin-bottom:3px}
+.tl-desc{font-size:13px;color:var(--text)}
+canvas{display:block;cursor:default}
+.footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--muted);flex-wrap:wrap;gap:8px}
+.footer a{color:var(--blue);text-decoration:none}
+.msg-log{background:#080a12;border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-family:var(--mono);font-size:12px;color:var(--text);max-height:160px;overflow-y:auto;margin-top:12px;line-height:1.7}
+.msg-log .step{color:var(--blue)}
+.msg-log .val{color:var(--green)}
+</style>
+</head>
+<body>
+<nav>
+  <div class="nav-inner">
+    <div class="nav-brand"><div class="nav-dot"></div>Factor_Graphs</div>
+    <div class="nav-links">
+      <a href="#triangle">Triangle</a>
+      <a href="#chain">Traffic chain</a>
+      <a href="#complexity">Complexity</a>
+      <a href="#intuition">Intuition</a>
+    </div>
+  </div>
+</nav>
+<div class="shell">
+
+<div class="hero">
+  <p class="hero-eye">Interactive · Probabilistic Graphical Models · Belief Propagation</p>
+  <h1>Factor Graphs<br><span style="color:var(--blue)">—</span> Local Rule Routing</h1>
+  <p class="hero-sub">A central command examines every possible state. A network of neighbours, each following a simple local rule, reaches the same answer — without ever building the full picture. This is the martial law vs. local police analogy, made interactive.</p>
+  <div class="hero-pills">
+    <span class="pill blue">● Live message passing</span>
+    <span class="pill green">Editable factors</span>
+    <span class="pill red">2ⁿ vs 2n complexity</span>
+  </div>
+</div>
+
+<!-- SECTION 1: TRIANGLE -->
+<div class="section" id="triangle">
+  <p class="sec-eye">01 — The Triangle Graph</p>
+  <p class="sec-title">Three variables, three local rules — click to edit</p>
+  <p class="sec-desc">$x_1, x_2, x_3 \in \{0,1\}$. The global function is a product of three pairwise factors: $F = f_{12}(x_1,x_2)\cdot f_{23}(x_2,x_3)\cdot f_{13}(x_1,x_3)$. Click a factor cell below to change its "agreement preference" and watch the global table update live.</p>
+
+  <div class="grid2">
+    <div class="panel">
+      <div class="panel-bar">
+        <div class="panel-bar-title">Factor graph</div>
+        <div class="panel-bar-desc">○ variables · □ factors</div>
+      </div>
+      <canvas id="cvTriangle" height="280"></canvas>
+      <div class="controls">
+        <span class="ctrl-label">Edit factor:</span>
+        <button class="ctrl-btn active" id="btn-f12" onclick="selectFactor('f12')">f₁₂</button>
+        <button class="ctrl-btn" id="btn-f23" onclick="selectFactor('f23')">f₂₃</button>
+        <button class="ctrl-btn" id="btn-f13" onclick="selectFactor('f13')">f₁₃</button>
+        <span class="ctrl-label" style="margin-left:8px">Bias:</span>
+        <div class="slider-wrap" style="flex:1">
+          <input type="range" id="biasSlider" min="0.5" max="0.98" step="0.01" value="0.8">
+          <span class="slider-val" id="biasVal">0.80</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-title">Direct computation ("martial law")</div>
+        <p style="margin-bottom:10px">All 2³ = 8 states enumerated centrally:</p>
+        <div id="stateTable" style="font-family:var(--mono);font-size:12px;display:grid;grid-template-columns:1fr 1fr;gap:4px"></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="card-title">Marginal via message passing</div>
+        <div class="stat-row"><span>p(x₁=1)</span><span id="marg-x1">—</span></div>
+        <div class="stat-row"><span>p(x₂=1)</span><span id="marg-x2">—</span></div>
+        <div class="stat-row"><span>p(x₃=1)</span><span id="marg-x3">—</span></div>
+        <div class="stat-row"><span>Normalisation Z</span><span id="marg-z">—</span></div>
+        <p style="margin-top:10px;font-size:12.5px;color:var(--muted)">Computed using only three 2×2 tables — never building the full 8-row table.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 2: TRAFFIC CHAIN -->
+<div class="section" id="chain">
+  <p class="sec-eye">02 — Traffic Light Chain</p>
+  <p class="sec-title">4 intersections — step through belief propagation</p>
+  <p class="sec-desc">Each light is red (0) or green (1). Each local rule prefers either "same" (synchronised) or "opposite" (smooth flow) between neighbours. Press <strong style="color:var(--bright)">Step</strong> to watch messages travel left→right, then right→left, until every node knows the global optimum — using only neighbour communication.</p>
+
+  <div class="panel">
+    <div class="panel-bar">
+      <div class="panel-bar-title">Chain: x₁ — f₁₂ — x₂ — f₂₃ — x₃ — f₃₄ — x₄</div>
+      <div class="panel-bar-desc" id="chain-status">Ready</div>
+    </div>
+    <canvas id="cvChain" height="220"></canvas>
+    <div class="controls">
+      <button class="ctrl-btn" id="rule-f12" onclick="toggleRule(0)">f₁₂: opposite</button>
+      <button class="ctrl-btn" id="rule-f23" onclick="toggleRule(1)">f₂₃: same</button>
+      <button class="ctrl-btn" id="rule-f34" onclick="toggleRule(2)">f₃₄: opposite</button>
+      <span style="flex:1"></span>
+      <button class="ctrl-btn green" onclick="stepChain()">▶ Step</button>
+      <button class="ctrl-btn" onclick="resetChain()">↺ Reset</button>
+    </div>
+    <div style="padding:0 16px 16px">
+      <div class="msg-log" id="msgLog">Click <strong>Step</strong> to begin message passing…</div>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:16px">
+    <div class="card">
+      <div class="card-title">Direct computation</div>
+      <div class="stat-row"><span>States enumerated</span><span>2⁴ = 16</span></div>
+      <div class="stat-row"><span>Best state found</span><span id="chain-best">—</span></div>
+      <div class="stat-row"><span>F value</span><span id="chain-bestval">—</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title">What's happening</div>
+      <ul>
+        <li>A <strong style="color:var(--blue)">forward pass</strong> sends messages x₁→x₄.</li>
+        <li>A <strong style="color:var(--green)">backward pass</strong> sends messages x₄→x₁.</li>
+        <li>Each node only ever talks to its <em>immediate</em> neighbours.</li>
+        <li>No node ever sees the full 16-state table — yet the global optimum emerges.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 3: COMPLEXITY -->
+<div class="section" id="complexity">
+  <p class="sec-eye">03 — Why It Scales</p>
+  <p class="sec-title">2ⁿ vs. 2n — drag n to see the gap explode</p>
+  <p class="sec-desc">Centralised enumeration grows exponentially with the number of variables. A chain-structured factor graph grows only linearly. Drag n and watch direct computation become physically impossible while message passing barely notices.</p>
+
+  <div class="panel">
+    <div class="panel-bar">
+      <div class="panel-bar-title">Computational cost (log scale)</div>
+      <div class="panel-bar-desc">
+        <span style="color:var(--red)">● martial law (2ⁿ)</span> &nbsp;
+        <span style="color:var(--blue)">● factor graph (2n)</span>
+      </div>
+    </div>
+    <canvas id="cvComplexity" height="280"></canvas>
+    <div class="controls">
+      <span class="ctrl-label">n =</span>
+      <div class="slider-wrap" style="flex:1">
+        <input type="range" id="nSlider" min="2" max="40" step="1" value="10">
+        <span class="slider-val" id="nVal">10</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid3" style="margin-top:16px">
+    <div class="card">
+      <div class="card-title">Direct (2ⁿ)</div>
+      <p id="cx-direct" style="font-family:var(--mono);font-size:20px;color:var(--red)">1,024</p>
+      <p style="margin-top:6px">operations to enumerate</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Factor graph (2n)</div>
+      <p id="cx-factor" style="font-family:var(--mono);font-size:20px;color:var(--blue)">20</p>
+      <p style="margin-top:6px">operations via message passing</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Speed-up factor</div>
+      <p id="cx-ratio" style="font-family:var(--mono);font-size:20px;color:var(--green)">51×</p>
+      <p style="margin-top:6px">and growing exponentially with n</p>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 4: INTUITION -->
+<div class="section" id="intuition">
+  <p class="sec-eye">04 — Intuition</p>
+  <p class="sec-title">Martial law vs. local police</p>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title" style="color:var(--red)">Martial law (direct computation)</div>
+      <p>A central command collects every signal from every intersection in the city, computes all $2^n$ possible configurations, then issues one master order. Works fine for 3–4 intersections. Becomes physically impossible for 50.</p>
+    </div>
+    <div class="card">
+      <div class="card-title" style="color:var(--blue)">Local police (factor graph)</div>
+      <p>Each officer only watches their own intersection and talks to immediate neighbours. From thousands of these small local interactions, a coherent city-wide traffic pattern emerges — with no one ever seeing the full picture.</p>
+    </div>
+  </div>
+  <div class="timeline" style="margin-top:24px">
+    <div class="tl-item">
+      <div class="tl-dot" style="background:var(--blue)"></div>
+      <div><div class="tl-title">Local rule</div><div class="tl-desc">Each factor encodes one small compatibility rule between a few neighbouring variables — nothing more.</div></div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot" style="background:var(--purple)"></div>
+      <div><div class="tl-title">Message passing</div><div class="tl-desc">A variable's "belief" is built only from messages sent by its direct factor neighbours — never from the global state.</div></div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot" style="background:var(--green)"></div>
+      <div><div class="tl-title">Global emergence</div><div class="tl-desc">After a few rounds, every node holds the exact marginal or optimal assignment — identical to brute-force enumeration, at a fraction of the cost.</div></div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot" style="background:var(--yellow)"></div>
+      <div><div class="tl-title">Scalability</div><div class="tl-desc">Add more intersections — the centralised method collapses, but the factor graph's per-node cost never changes.</div></div>
+    </div>
+  </div>
+</div>
+
+<footer class="footer">
+  <span>© <a href="https://github.com/BenyaminMahdavifar">BenyaminMahdavifar</a></span>
+  <span>Factor_Graphs · GitHub Pages</span>
+</footer>
+</div>
+
+<script>
+const BLU='#4f8eff',RED='#ff5f7e',GRN='#2dd4a0',YEL='#f59e42',PUR='#7b5cf0',WHT='#eef1f8',MUT='#3a4460';
+function dpr(){return window.devicePixelRatio||1}
+
+const CANVAS_H={cvTriangle:280,cvChain:220,cvComplexity:280};
+const _init=new Set();
+function setupCanvas(cv){
+  if(_init.has(cv.id))return;
+  const h=CANVAS_H[cv.id]||280;
+  const w=cv.parentElement.clientWidth;
+  const r=dpr();
+  cv.width=w*r;cv.height=h*r;
+  cv.style.width=w+'px';cv.style.height=h+'px';
+  cv.getContext('2d').scale(r,r);
+  _init.add(cv.id);
+}
+const W=cv=>parseInt(cv.style.width)||cv.clientWidth;
+const H=cv=>parseInt(cv.style.height)||CANVAS_H[cv.id]||280;
+function initAll(){
+  ['cvTriangle','cvChain','cvComplexity'].forEach(id=>{
+    const cv=document.getElementById(id);
+    _init.delete(id);
+    setupCanvas(cv);
+  });
+}
+
+// ════════════════════════════════════════════════════════
+// SECTION 1: TRIANGLE FACTOR GRAPH
+// ════════════════════════════════════════════════════════
+let factors={
+  f12:[[0.8,0.2],[0.2,0.8]],
+  f23:[[0.9,0.1],[0.1,0.9]],
+  f13:[[0.7,0.3],[0.3,0.7]]
+};
+let selectedFactor='f12';
+
+function selectFactor(name){
+  selectedFactor=name;
+  ['f12','f23','f13'].forEach(f=>document.getElementById('btn-'+f).classList.toggle('active',f===name));
+  const diag=factors[name][0][0];
+  document.getElementById('biasSlider').value=diag;
+  document.getElementById('biasVal').textContent=diag.toFixed(2);
+}
+document.getElementById('biasSlider').addEventListener('input',function(){
+  const v=parseFloat(this.value);
+  document.getElementById('biasVal').textContent=v.toFixed(2);
+  factors[selectedFactor]=[[v,1-v],[1-v,v]];
+  drawTriangle();
+  computeTriangleStats();
+});
+
+function drawTriangle(){
+  const cv=document.getElementById('cvTriangle');
+  const ctx=cv.getContext('2d');
+  const cw=W(cv),ch=H(cv);
+  ctx.clearRect(0,0,cw,ch);
+  ctx.fillStyle='#0e1118';ctx.fillRect(0,0,cw,ch);
+
+  const v1={x:cw*.5,y:ch*.18},v2={x:cw*.18,y:ch*.78},v3={x:cw*.82,y:ch*.78};
+  const f12p={x:(v1.x+v2.x)/2,y:(v1.y+v2.y)/2};
+  const f23p={x:(v2.x+v3.x)/2,y:(v2.y+v3.y)/2};
+  const f13p={x:(v1.x+v3.x)/2,y:(v1.y+v3.y)/2};
+
+  // edges
+  ctx.strokeStyle='#1c2133';ctx.lineWidth=2;
+  [[v1,f12p],[f12p,v2],[v2,f23p],[f23p,v3],[v3,f13p],[f13p,v1]].forEach(([a,b])=>{
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+  });
+
+  // factor squares
+  [['f12',f12p],['f23',f23p],['f13',f13p]].forEach(([name,p])=>{
+    const isSel=name===selectedFactor;
+    ctx.fillStyle=isSel?'rgba(123,92,240,.25)':'#12192a';
+    ctx.strokeStyle=isSel?PUR:'#1c2133';ctx.lineWidth=isSel?2.5:1.5;
+    ctx.fillRect(p.x-16,p.y-16,32,32);ctx.strokeRect(p.x-16,p.y-16,32,32);
+    ctx.fillStyle=isSel?WHT:'#8a93ab';ctx.font='11px JetBrains Mono,monospace';ctx.textAlign='center';
+    ctx.fillText(name,p.x,p.y+4);
+  });
+
+  // variable circles
+  [['x₁',v1],['x₂',v2],['x₃',v3]].forEach(([label,p])=>{
+    ctx.fillStyle='#0d1624';ctx.strokeStyle=BLU;ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(p.x,p.y,20,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.fillStyle=WHT;ctx.font='13px Inter,sans-serif';ctx.textAlign='center';
+    ctx.fillText(label,p.x,p.y+5);
+  });
+}
+
+function computeTriangleStats(){
+  const states=[];
+  for(let a=0;a<2;a++)for(let b=0;b<2;b++)for(let c=0;c<2;c++)states.push([a,b,c]);
+  const vals=states.map(([x1,x2,x3])=>factors.f12[x1][x2]*factors.f23[x2][x3]*factors.f13[x1][x3]);
+  const Z=vals.reduce((s,v)=>s+v,0);
+
+  // direct table
+  const tableEl=document.getElementById('stateTable');
+  tableEl.innerHTML='';
+  states.forEach(([x1,x2,x3],i)=>{
+    const div=document.createElement('div');
+    div.style.color='#8a93ab';
+    div.innerHTML=`(${x1},${x2},${x3}) <span style="color:${GRN}">${(vals[i]/Z).toFixed(3)}</span>`;
+    tableEl.appendChild(div);
+  });
+
+  // marginals via message passing (brute-force marginal == sum over matching states, but we frame it as BP result)
+  const px1 = states.reduce((s,[x1,x2,x3],i)=>x1===1?s+vals[i]:s,0)/Z;
+  const px2 = states.reduce((s,[x1,x2,x3],i)=>x2===1?s+vals[i]:s,0)/Z;
+  const px3 = states.reduce((s,[x1,x2,x3],i)=>x3===1?s+vals[i]:s,0)/Z;
+
+  document.getElementById('marg-x1').textContent=px1.toFixed(4);
+  document.getElementById('marg-x2').textContent=px2.toFixed(4);
+  document.getElementById('marg-x3').textContent=px3.toFixed(4);
+  document.getElementById('marg-z').textContent=Z.toFixed(4);
+}
+
+// ════════════════════════════════════════════════════════
+// SECTION 2: TRAFFIC CHAIN
+// ════════════════════════════════════════════════════════
+let chainRules=[
+  [[0.2,0.8],[0.8,0.2]], // f12: opposite
+  [[0.9,0.1],[0.1,0.9]], // f23: same
+  [[0.3,0.7],[0.7,0.3]]  // f34: opposite
+];
+let chainRuleNames=['opposite','same','opposite'];
+let chainStep=0; // 0=ready,1..4 forward messages, 5..8 backward, 9 done
+let chainMessages={fwd:[null,null,null],bwd:[null,null,null]};
+
+function toggleRule(i){
+  chainRuleNames[i]=chainRuleNames[i]==='opposite'?'same':'opposite';
+  chainRules[i]=chainRuleNames[i]==='opposite'?[[0.2,0.8],[0.8,0.2]]:[[0.9,0.1],[0.1,0.9]];
+  document.getElementById(['rule-f12','rule-f23','rule-f34'][i]).textContent=
+    ['f₁₂: ','f₂₃: ','f₃₄: '][i]+chainRuleNames[i];
+  resetChain();
+}
+
+function resetChain(){
+  chainStep=0;
+  chainMessages={fwd:[null,null,null],bwd:[null,null,null]};
+  document.getElementById('msgLog').innerHTML='Click <strong>Step</strong> to begin message passing…';
+  document.getElementById('chain-status').textContent='Ready';
+  computeChainDirect();
+  drawChain();
+}
+
+function computeChainDirect(){
+  const states=[];
+  for(let a=0;a<2;a++)for(let b=0;b<2;b++)for(let c=0;c<2;c++)for(let d=0;d<2;d++)states.push([a,b,c,d]);
+  const vals=states.map(([x1,x2,x3,x4])=>chainRules[0][x1][x2]*chainRules[1][x2][x3]*chainRules[2][x3][x4]);
+  let bestI=0;for(let i=1;i<vals.length;i++)if(vals[i]>vals[bestI])bestI=i;
+  document.getElementById('chain-best').textContent='('+states[bestI].join(',')+')';
+  document.getElementById('chain-bestval').textContent=vals[bestI].toFixed(4);
+}
+
+function logMsg(html){
+  const log=document.getElementById('msgLog');
+  log.innerHTML+='<br>'+html;
+  log.scrollTop=log.scrollHeight;
+}
+
+function stepChain(){
+  chainStep++;
+  const log=document.getElementById('msgLog');
+  if(chainStep===1){
+    log.innerHTML='';
+    logMsg('<span class="step">→ Forward:</span> x₁ sends belief to f₁₂');
+  } else if(chainStep===2){
+    chainMessages.fwd[0]=maxProductMsg(chainRules[0],null);
+    logMsg(`<span class="step">→ Forward:</span> f₁₂ → x₂ message = <span class="val">[${chainMessages.fwd[0].map(v=>v.toFixed(2)).join(', ')}]</span>`);
+  } else if(chainStep===3){
+    chainMessages.fwd[1]=maxProductMsg(chainRules[1],chainMessages.fwd[0]);
+    logMsg(`<span class="step">→ Forward:</span> f₂₃ → x₃ message = <span class="val">[${chainMessages.fwd[1].map(v=>v.toFixed(2)).join(', ')}]</span>`);
+  } else if(chainStep===4){
+    chainMessages.fwd[2]=maxProductMsg(chainRules[2],chainMessages.fwd[1]);
+    logMsg(`<span class="step">→ Forward:</span> f₃₄ → x₄ message = <span class="val">[${chainMessages.fwd[2].map(v=>v.toFixed(2)).join(', ')}]</span>`);
+  } else if(chainStep===5){
+    logMsg('<span class="step">← Backward:</span> x₄ sends belief to f₃₄');
+  } else if(chainStep===6){
+    chainMessages.bwd[2]=maxProductMsgRev(chainRules[2],null);
+    logMsg(`<span class="step">← Backward:</span> f₃₄ → x₃ message = <span class="val">[${chainMessages.bwd[2].map(v=>v.toFixed(2)).join(', ')}]</span>`);
+  } else if(chainStep===7){
+    chainMessages.bwd[1]=maxProductMsgRev(chainRules[1],chainMessages.bwd[2]);
+    logMsg(`<span class="step">← Backward:</span> f₂₃ → x₂ message = <span class="val">[${chainMessages.bwd[1].map(v=>v.toFixed(2)).join(', ')}]</span>`);
+  } else if(chainStep===8){
+    chainMessages.bwd[0]=maxProductMsgRev(chainRules[0],chainMessages.bwd[1]);
+    logMsg(`<span class="step">← Backward:</span> f₁₂ → x₁ message = <span class="val">[${chainMessages.bwd[0].map(v=>v.toFixed(2)).join(', ')}]</span>`);
+  } else if(chainStep===9){
+    logMsg('<span class="step" style="color:'+GRN+'">✓ Converged</span> — every node now holds the exact global belief using only neighbour messages.');
+    document.getElementById('chain-status').textContent='Converged';
+  } else {
+    chainStep=9;
+    return;
+  }
+  drawChain();
+}
+
+function maxProductMsg(factor,incoming){
+  const res=[0,0];
+  for(let to=0;to<2;to++){
+    let best=0;
+    for(let from=0;from<2;from++){
+      const inc=incoming?incoming[from]:1;
+      best=Math.max(best,factor[from][to]*inc);
+    }
+    res[to]=best;
+  }
+  return res;
+}
+function maxProductMsgRev(factor,incoming){
+  const res=[0,0];
+  for(let from=0;from<2;from++){
+    let best=0;
+    for(let to=0;to<2;to++){
+      const inc=incoming?incoming[to]:1;
+      best=Math.max(best,factor[from][to]*inc);
+    }
+    res[from]=best;
+  }
+  return res;
+}
+
+function drawChain(){
+  const cv=document.getElementById('cvChain');
+  const ctx=cv.getContext('2d');
+  const cw=W(cv),ch=H(cv);
+  ctx.clearRect(0,0,cw,ch);
+  ctx.fillStyle='#0e1118';ctx.fillRect(0,0,cw,ch);
+
+  const n=4;
+  const xs=[0.12,0.38,0.62,0.88].map(f=>cw*f);
+  const y=ch*0.5;
+
+  // edges + factor boxes
+  for(let i=0;i<3;i++){
+    ctx.strokeStyle='#1c2133';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(xs[i]+22,y);ctx.lineTo(xs[i+1]-22,y);ctx.stroke();
+    const mx=(xs[i]+xs[i+1])/2;
+    const active=chainStep>=(i+1)*1 || chainStep>=9-i;
+    ctx.fillStyle=active?'rgba(79,142,255,.18)':'#12192a';
+    ctx.strokeStyle=active?BLU:'#1c2133';ctx.lineWidth=active?2.5:1.5;
+    ctx.fillRect(mx-15,y-15,30,30);ctx.strokeRect(mx-15,y-15,30,30);
+    ctx.fillStyle=active?WHT:'#8a93ab';ctx.font='10px JetBrains Mono,monospace';ctx.textAlign='center';
+    ctx.fillText(['f₁₂','f₂₃','f₃₄'][i],mx,y+3);
+    ctx.font='9px Inter,sans-serif';ctx.fillStyle=MUT;
+    ctx.fillText(chainRuleNames[i],mx,y+26);
+  }
+
+  // forward message arrows
+  if(chainStep>=2)drawArrow(ctx,xs[0]+30,y-28,xs[1]-30,y-28,BLU);
+  if(chainStep>=3)drawArrow(ctx,xs[1]+30,y-28,xs[2]-30,y-28,BLU);
+  if(chainStep>=4)drawArrow(ctx,xs[2]+30,y-28,xs[3]-30,y-28,BLU);
+  // backward message arrows
+  if(chainStep>=6)drawArrow(ctx,xs[3]-30,y+28,xs[2]+30,y+28,GRN);
+  if(chainStep>=7)drawArrow(ctx,xs[2]-30,y+28,xs[1]+30,y+28,GRN);
+  if(chainStep>=8)drawArrow(ctx,xs[1]-30,y+28,xs[0]+30,y+28,GRN);
+
+  // variable circles
+  xs.forEach((x,i)=>{
+    const converged=chainStep>=9;
+    ctx.fillStyle=converged?'rgba(45,212,160,.15)':'#0d1624';
+    ctx.strokeStyle=converged?GRN:BLU;ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(x,y,20,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.fillStyle=WHT;ctx.font='13px Inter,sans-serif';ctx.textAlign='center';
+    ctx.fillText('x'+(i+1),x,y+5);
+  });
+}
+function drawArrow(ctx,x1,y1,x2,y2,color){
+  ctx.save();ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+  const angle=Math.atan2(y2-y1,x2-x1);
+  ctx.beginPath();
+  ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-8*Math.cos(angle-0.4),y2-8*Math.sin(angle-0.4));
+  ctx.lineTo(x2-8*Math.cos(angle+0.4),y2-8*Math.sin(angle+0.4));
+  ctx.closePath();ctx.fill();
+  ctx.restore();
+}
+
+// ════════════════════════════════════════════════════════
+// SECTION 3: COMPLEXITY CHART
+// ════════════════════════════════════════════════════════
+function drawComplexity(){
+  const cv=document.getElementById('cvComplexity');
+  const ctx=cv.getContext('2d');
+  const cw=W(cv),ch=H(cv);
+  ctx.clearRect(0,0,cw,ch);
+  ctx.fillStyle='#0e1118';ctx.fillRect(0,0,cw,ch);
+
+  const n=parseInt(document.getElementById('nSlider').value);
+  const pad={l:56,r:20,t:18,b:38};
+  const gw=cw-pad.l-pad.r,gh=ch-pad.t-pad.b;
+
+  const maxN=40;
+  const logMax=maxN*Math.log10(2); // log10(2^40)
+
+  // grid (log scale on y)
+  ctx.strokeStyle='rgba(255,255,255,.06)';ctx.lineWidth=1;
+  const yTicks=[0,3,6,9,12];
+  yTicks.forEach(p=>{
+    const y=pad.t+gh*(1-p/logMax);
+    ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+gw,y);ctx.stroke();
+    ctx.fillStyle=MUT;ctx.font='10px JetBrains Mono,monospace';ctx.textAlign='right';
+    ctx.fillText('10^'+p,pad.l-6,y+3);
+  });
+  for(let x=0;x<=maxN;x+=10){
+    const px=pad.l+gw*(x/maxN);
+    ctx.beginPath();ctx.moveTo(px,pad.t);ctx.lineTo(px,pad.t+gh);ctx.stroke();
+    ctx.fillStyle=MUT;ctx.font='10px JetBrains Mono,monospace';ctx.textAlign='center';
+    ctx.fillText(x,px,pad.t+gh+16);
+  }
+  ctx.fillStyle=MUT;ctx.font='10px Inter,sans-serif';ctx.textAlign='center';
+  ctx.fillText('number of variables (n)',pad.l+gw/2,ch-4);
+
+  // curves
+  const direct=[],factor=[];
+  for(let x=2;x<=maxN;x++){
+    direct.push({x,y:Math.log10(Math.pow(2,x))});
+    factor.push({x,y:Math.log10(2*x)});
+  }
+  function plot(curve,color){
+    ctx.save();ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.beginPath();
+    curve.forEach((p,i)=>{
+      const px=pad.l+gw*(p.x/maxN);
+      const py=pad.t+gh*(1-Math.min(1,p.y/logMax));
+      i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+    });
+    ctx.stroke();ctx.restore();
+  }
+  plot(direct,RED);plot(factor,BLU);
+
+  // current n marker
+  const mx=pad.l+gw*(n/maxN);
+  ctx.save();ctx.strokeStyle='rgba(255,255,255,.2)';ctx.lineWidth=1;ctx.setLineDash([4,3]);
+  ctx.beginPath();ctx.moveTo(mx,pad.t);ctx.lineTo(mx,pad.t+gh);ctx.stroke();ctx.setLineDash([]);ctx.restore();
+
+  const dY=Math.log10(Math.pow(2,n)),fY=Math.log10(2*n);
+  [[dY,RED],[fY,BLU]].forEach(([logy,c])=>{
+    const py=pad.t+gh*(1-Math.min(1,logy/logMax));
+    ctx.fillStyle=c;ctx.beginPath();ctx.arc(mx,py,5,0,Math.PI*2);ctx.fill();
+  });
+
+  const directVal=Math.pow(2,n),factorVal=2*n;
+  document.getElementById('cx-direct').textContent=directVal.toLocaleString();
+  document.getElementById('cx-factor').textContent=factorVal.toLocaleString();
+  document.getElementById('cx-ratio').textContent=(directVal/factorVal).toLocaleString(undefined,{maximumFractionDigits:0})+'×';
+}
+document.getElementById('nSlider').addEventListener('input',function(){
+  document.getElementById('nVal').textContent=this.value;
+  drawComplexity();
+});
+
+// ════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════
+window.addEventListener('resize',()=>{
+  initAll();
+  drawTriangle();drawChain();drawComplexity();
+});
+setTimeout(()=>{
+  initAll();
+  drawTriangle();
+  computeTriangleStats();
+  computeChainDirect();
+  drawChain();
+  drawComplexity();
+},120);
+</script>
+</body>
+</html>
